@@ -33,10 +33,46 @@ It’s also a good way to visualize your user retention/churn as well as formula
 Imagine we have the following dataset (you can find it [here](https://github.com/synapticielfactory/eland_es_analytics) ):
 
 ```python
+# import eland official API
+# check it on https://github.com/elastic/eland
+import eland as ed
+
+# import elasticsearch-py client
+from elasticsearch import Elasticsearch
+
+# Function for pretty-printing JSON
+def json(raw):
+    import json
+    print(json.dumps(raw, indent=2, sort_keys=True))
+    
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+
+pd.set_option('max_columns', 50)
+mpl.rcParams['lines.linewidth'] = 2
+
+%matplotlib inline
+
+# Connect to an Elasticsearch instance
+# here we use the official Elastic Python client
+# check it on https://github.com/elastic/elasticsearch-py
+es = Elasticsearch(
+  ['http://localhost:9200'],
+  http_auth=("es_kbn", "changeme")
+)
+# print the connection object info (same as visiting http://localhost:9200)
+# make sure your elasticsearch node/cluster respond to requests
+json(es.info())
+
+
 ed_invoices = ed.read_es(es, 'eland-invoices')
 df_invoices = ed.eland_to_pandas(ed_invoices)
 df_invoices.head()
 ```
+
+<img src="./screens/dataset.png" align="middle">
 
 1. Create a period column based on the OrderDate
 Since we're doing monthly cohorts, we'll be looking at the total monthly behavior of our users. Therefore, we don't want granular OrderDate data (right now).
@@ -45,6 +81,10 @@ Since we're doing monthly cohorts, we'll be looking at the total monthly behavio
 df_invoices['order_period'] = df_invoices.invoice_date.apply(lambda x: x.strftime('%Y-%m'))
 df_invoices.head()
 ```
+<img src="./screens/order_period.png" align="middle">
+
+
+
 2. Determine the user's cohort group (based on their first order)
 
 Create a new column called CohortGroup, which is the year and month in which the user's first purchase occurred.
@@ -55,6 +95,10 @@ df_invoices['cohort_group'] = df_invoices.groupby(level=0)['invoice_date'].min()
 df_invoices.reset_index(inplace=True)
 df_invoices.head()
 ```
+<img src="./screens/cohort_group.png" align="middle">
+
+
+
 3. Rollup data by CohortGroup & OrderPeriod
 
 Since we're looking at monthly cohorts, we need to aggregate users, orders, and amount spent by the CohortGroup within the month (OrderPeriod).
@@ -72,6 +116,10 @@ cohorts.rename(columns={'customer_id': 'total_customers',
                         'invoice_id': 'total_orders'}, inplace=True)
 cohorts.head()
 ```
+
+<img src="./screens/total1.png" align="middle">
+
+
 
 4. Label the CohortPeriod for each CohortGroup
 
@@ -96,6 +144,7 @@ def cohort_period(df_invoices):
 
 cohorts = cohorts.groupby(level=0).apply(cohort_period)
 ```
+<img src="./screens/total2.png" align="middle">
 
 
 ## User Retention by Cohort Group
@@ -127,6 +176,8 @@ And here's what they look like when we unstack the CohortGroup level from the in
 ````python
 cohorts['total_customers'].unstack(0).head(10)
 ````
+<img src="./screens/cohort.png" align="middle">
+
 
 Now, we can utilize broadcasting to divide each column by the corresponding cohort_group_size.
 
@@ -149,6 +200,9 @@ plt.xticks(np.arange(1, 12.1, 1))
 plt.xlim(1, 12)
 plt.ylabel('% of Cohort Purchasing');
 ````
+<img src="./screens/plot.png" align="middle">
+
+
 
 Let's plot a heatmap
 
@@ -165,6 +219,9 @@ plt.title('Cohorts Analysis : Customers Retention Rate')
 
 sns.heatmap(user_retention.T, mask=user_retention.T.isnull(), annot=True, fmt='.0%');
 ````
+
+<img src="./screens/heatmap.png" align="middle">
+
 
 Unsurprisingly, we can see from the above chart that fewer users tend to purchase as time goes on.
 
